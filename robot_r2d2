@@ -1,0 +1,300 @@
+#include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h> // 1. Librería para la pantalla LCD I2C
+
+// ======================================
+// CONFIGURACION DE PINES
+// ======================================
+
+// Motor 1 - L293D
+const int motor1Pin1 = 5;
+const int motor1Pin2 = 6;
+
+// Motor 2 - L293D
+const int motor2Pin1 = 9;
+const int motor2Pin2 = 10;
+
+// Servo y buzzer
+const int servoPin = 11;
+const int piezoPin = 8;
+
+// Sensores
+const int sensorIzq = A0;
+const int sensorCentro = A1;
+const int sensorDer = A2;
+
+// ======================================
+// VARIABLES Y OBJETOS
+// ======================================
+
+Servo miServo;
+LiquidCrystal_I2C lcd(0x27, 16, 2); // 2. Objeto LCD (Dirección 0x27, 16 columnas, 2 filas)
+
+int velocidad = 180;
+int anguloServo = 0;
+
+const int umbral = 500;
+
+// ======================================
+// CONFIGURACION INICIAL
+// ======================================
+
+void setup() {
+  Serial.begin(9600);
+
+  // 3. Inicializar la pantalla LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("ROBOT INICIADO");
+  lcd.setCursor(0, 1);
+  lcd.print("Esperando cmd...");
+
+  pinMode(motor1Pin1, OUTPUT);
+  pinMode(motor1Pin2, OUTPUT);
+
+  pinMode(motor2Pin1, OUTPUT);
+  pinMode(motor2Pin2, OUTPUT);
+
+  pinMode(piezoPin, OUTPUT);
+
+  pinMode(sensorIzq, INPUT);
+  pinMode(sensorCentro, INPUT);
+  pinMode(sensorDer, INPUT);
+
+  miServo.attach(servoPin);
+  miServo.write(0);
+
+  detener();
+
+  Serial.println("ROBOT INICIADO");
+  Serial.println("F = Avanzar");
+  Serial.println("B = Retroceder");
+  Serial.println("R = Derecha");
+  Serial.println("L = Izquierda");
+  Serial.println("S = Detener");
+  Serial.println("A = Servo");
+  Serial.println("P = Sonido");
+  Serial.println("T = Sensores");
+}
+
+// ======================================
+// FUNCIONES DE MOVIMIENTO
+// ======================================
+
+void avanzar(int vel = 180) {
+  vel = constrain(vel, 0, 255);
+  analogWrite(motor1Pin1, vel);
+  digitalWrite(motor1Pin2, LOW);
+  analogWrite(motor2Pin1, vel);
+  digitalWrite(motor2Pin2, LOW);
+}
+
+void retroceder(int vel = 180) {
+  vel = constrain(vel, 0, 255);
+  digitalWrite(motor1Pin1, LOW);
+  analogWrite(motor1Pin2, vel);
+  digitalWrite(motor2Pin1, LOW);
+  analogWrite(motor2Pin2, vel);
+}
+
+void girarDerecha(int vel = 180) {
+  vel = constrain(vel, 0, 255);
+  analogWrite(motor1Pin1, vel);
+  digitalWrite(motor1Pin2, LOW);
+  digitalWrite(motor2Pin1, LOW);
+  analogWrite(motor2Pin2, vel);
+}
+
+void girarIzquierda(int vel = 180) {
+  vel = constrain(vel, 0, 255);
+  digitalWrite(motor1Pin1, LOW);
+  analogWrite(motor1Pin2, vel);
+  analogWrite(motor2Pin1, vel);
+  digitalWrite(motor2Pin2, LOW);
+}
+
+void detener() {
+  digitalWrite(motor1Pin1, LOW);
+  digitalWrite(motor1Pin2, LOW);
+  digitalWrite(motor2Pin1, LOW);
+  digitalWrite(motor2Pin2, LOW);
+}
+
+// ======================================
+// CONTROL DEL SERVO
+// ======================================
+
+void moverServo(int angulo) {
+  angulo = constrain(angulo, 0, 180);
+  miServo.write(angulo);
+  anguloServo = angulo;
+}
+
+// ======================================
+// CONTROL DEL BUZZER
+// ======================================
+
+void sonido(int frecuencia, int duracion) {
+  tone(piezoPin, frecuencia, duracion);
+}
+
+// ======================================
+// LECTURA DE SENSORES
+// ======================================
+
+void leerSensores() {
+  int izquierda = analogRead(sensorIzq);
+  int centro = analogRead(sensorCentro);
+  int derecha = analogRead(sensorDer);
+
+  Serial.println("----- SENSORES -----");
+  Serial.print("Izquierdo: "); Serial.println(izquierda);
+  Serial.print("Centro: "); Serial.println(centro);
+  Serial.print("Derecho: "); Serial.println(derecha);
+  Serial.println("--------------------");
+
+  // Opcional: Mostrar los valores en la pantalla LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("C:"); 
+  lcd.print(centro);
+  lcd.setCursor(8, 0);
+  lcd.print("I:"); 
+  lcd.print(izquierda);
+}
+
+// ======================================
+// ACCION ESPECIAL
+// ======================================
+
+void ejecutarAccionEspecial(int angulo, int frecuencia, int espera) {
+  moverServo(angulo);
+  sonido(frecuencia, 300);
+  delay(espera);
+}
+
+// ======================================
+// CONTROL AUTOMATICO DE SENSORES
+// ======================================
+
+void modoAutomatico() {
+  int centro = analogRead(sensorCentro);
+
+  if (centro > umbral) {
+    detener();
+    ejecutarAccionEspecial(180, 1200, 400);
+    lcd.clear();
+    lcd.print("Auto: Obstaculo");
+  } else {
+    ejecutarAccionEspecial(0, 800, 400);
+    lcd.clear();
+    lcd.print("Auto: Libre");
+  }
+}
+
+// ======================================
+// COMANDOS POR MONITOR SERIAL
+// ======================================
+
+void loop() {
+  if (Serial.available() > 0) {
+    char comando = Serial.read();
+
+    // Limpiamos la pantalla antes de mostrar el nuevo estado
+    lcd.clear();
+    lcd.setCursor(0, 0);
+
+    switch (comando) {
+      case 'F':
+      case 'f':
+        avanzar(velocidad);
+        Serial.println("AVANZANDO");
+        lcd.print("AVANZANDO");
+        break;
+
+      case 'B':
+      case 'b':
+        retroceder(velocidad);
+        Serial.println("RETROCEDIENDO");
+        lcd.print("RETROCEDIENDO");
+        break;
+
+      case 'R':
+      case 'r':
+        girarDerecha(velocidad);
+        Serial.println("GIRANDO DERECHA");
+        lcd.print("GIRANDO DERECHA");
+        break;
+
+      case 'L':
+      case 'l':
+        girarIzquierda(velocidad);
+        Serial.println("GIRANDO IZQUIERDA");
+        lcd.print("GIRANDO IZQ");
+        break;
+
+      case 'S':
+      case 's':
+        detener();
+        Serial.println("MOTORES DETENIDOS");
+        lcd.print("DETENIDO");
+        break;
+
+      case 'A':
+      case 'a':
+        moverServo(180);
+        Serial.println("SERVO A 180 GRADOS");
+        lcd.print("SERVO 180");
+        break;
+
+      case 'C':
+      case 'c':
+        moverServo(0);
+        Serial.println("SERVO A 0 GRADOS");
+        lcd.print("SERVO 0");
+        break;
+
+      case 'P':
+      case 'p':
+        sonido(1200, 500);
+        Serial.println("SONIDO ACTIVADO");
+        lcd.print("SONIDO");
+        break;
+
+      case 'T':
+      case 't':
+        leerSensores();
+        break;
+
+      case 'M':
+      case 'm':
+        modoAutomatico();
+        Serial.println("MODO AUTOMATICO EJECUTADO");
+        break;
+
+      case '1':
+        velocidad = 100;
+        Serial.println("VELOCIDAD BAJA");
+        lcd.print("VEL: BAJA");
+        break;
+
+      case '2':
+        velocidad = 180;
+        Serial.println("VELOCIDAD MEDIA");
+        lcd.print("VEL: MEDIA");
+        break;
+
+      case '3':
+        velocidad = 255;
+        Serial.println("VELOCIDAD MAXIMA");
+        lcd.print("VEL: MAXIMA");
+        break;
+
+      default:
+        Serial.println("COMANDO NO RECONOCIDO");
+        lcd.print("DESCONOCIDO");
+        break;
+    }
+  }
+}
